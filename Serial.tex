@@ -1,0 +1,286 @@
+% Created 2015-07-14 Tue 13:19
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{fixltx2e}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{amssymb}
+\usepackage{hyperref}
+\tolerance=1000
+\date{2015-07-14}
+\title{EPICS Serial Howto}
+\hypersetup{
+  pdfkeywords={},
+  pdfsubject={},
+  pdfcreator={Emacs 24.3.1 (Org mode 8.2.4)}}
+\begin{document}
+
+\maketitle
+
+\section{Brief notes}
+\label{sec-1}
+Based on \url{http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/HowToDoSerial/tutorial.html}
+NOTE: \$TOP is \verb,~/project/EPICS/project/Metrolab, in this case\\
+  Code can be found in \verb,~/project/EPICS/project/docs/code/Metrolab,
+
+\subsection{Support module. This is the "driver"}
+\label{sec-1-1}
+\begin{enumerate}
+\item Make the skeleton
+\label{sec-1-1-1}
+\begin{itemize}
+\item Make a folder and build the skeleton code
+\begin{verbatim}
+mkdir Metrolab
+cd Metrolab
+$EPICS_SYNAPPS_BASE/support/asyn-4-26/bin/linux-x86_64/makeSupport.pl 
+                  -t devGpib Metrolab
+\end{verbatim}
+devGpib type is best for serial communivations
+\item Make some changes to configure/RELEASE
+\begin{verbatim}
+SNCSEQ=/data/EPICS/synApps/support/seq-2-2-1
+ASYN = /home/longland/project/EPICS/synApps/support/asyn-4-26/
+EPICS_BASE=/data/EPICS/base-3.15.2
+\end{verbatim}
+\item Make some changes to configure/CONFIG
+(uncomment CROSS$_{\text{COMPILER}}$$_{\text{TARGET}}$$_{\text{ARCHS}}$ and set it blank)
+\begin{verbatim}
+CROSS_COMPILER_TARGET_ARCHS =
+\end{verbatim}
+\end{itemize}
+\item Edit support code
+\label{sec-1-1-2}
+\begin{itemize}
+\item Edit file \verb~MetrolabSup/devMetrolab.c~
+\item Comment out unneeded DSET definitions (DSET$_{\text{AI}}$ must always be
+included)
+Note: "in" is "into EPICS". Out is "write out to device"
+\begin{verbatim}
+#define DSET_AI     devAiMetrolab   // analog in   - into EPICS
+#define DSET_AO     devAoMetrolab   // analog out  - out to device
+#define DSET_BI     devBiMetrolab   // binary in
+#define DSET_BO     devBoMetrolab   // binary out
+#define DSET_SI     devSiMetrolab   // string in
+#define DSET_SO     devSoMetrolab   // string out
+#define DSET_LI     devLiMetrolab   // long in
+#define DSET_LO     devLoMetrolab   // long out
+\end{verbatim}
+\item Define some strings to translate BI and BO numbers
+\begin{verbatim}
+static char  *offOnList[] = { "Off","On" };
+static struct devGpibNames   offOn = { 2,offOnList,0,1 };    
+
+static char  *remoteList[] = { "Remote","Remote" };
+static struct devGpibNames remote = { 2,remoteList,0,1 };
+
+static char  *localList[] = { "Local","Local" };
+static struct devGpibNames local = { 2,localList,0,1 };
+\end{verbatim}
+\item Comment out other unused string things (I uncommented
+      \verb~intExtSsBmStopList~ stuff used by MBBI and MBBO)
+\item Same for EFAST strings (comment out \verb~userOffOn~)
+\item Now is the important part. The command array. Each element in
+here is an individual command
+(see \url{http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/devGpib.html#CreateInstrumentSupport})
+\begin{verbatim}
+/* Param 0 -- Read the displayed value */
+{&DSET_SI,      // DSET of command (read a string from the device)
+ GPIBREAD,      // Type (read)
+ IB_Q_HIGH,     // Priority (high)
+ "\x05",        // Format string to send to device 
+                //            (ASCII HEX 05 - <ENQ>)
+ "%s",          // String to interpret message
+ 0, 200,        // Error message length, return message length
+ NULL,          // Conversion
+ 0, 0, NULL,    // P1, P2, and P3 used in conversion
+ NULL,          // Name strings
+ NULL           // Input end-of-string
+},
+
+/* Param 1 - Remote control */
+{&DSET_BO, GPIBCMD, IB_Q_HIGH, "R", NULL, 0, 0, 
+     NULL, 0, 0, NULL, &remote, NULL},
+
+/* Param 2 - Local control */
+{&DSET_BO, GPIBCMD, IB_Q_HIGH, "L", NULL, 0, 0, 
+     NULL, 0, 0, NULL, &local, NULL},
+
+/* Param 3 -- Read and convert the displayed value */
+{&DSET_SI,      // DSET of command (read a string from the device)
+ GPIBREAD,      // Type (read)
+ IB_Q_HIGH,     // Priority (high)
+ "\x05",        // Format string to send to device (ASCII HEX 05 - <ENQ>)
+ "%*c%9s",      // String to interpret message (ignore a character then 9 chars)
+ 0, 200,        // Error message length, return message length
+ NULL,          // Conversion
+ 0, 0, NULL,    // P1, P2, and P3 used in conversion
+ NULL,          // Name strings
+ NULL           // Input end-of-string
+},
+\end{verbatim}
+\item Modify the \verb~Metrolab/devMetrolab.dbd~ to include only the
+defined DSET definitions (you can comment out things using '\#')
+\begin{verbatim}
+device(ai,        GPIB_IO, devAiMetrolab,    "Metrolab")
+device(ao,        GPIB_IO, devAoMetrolab,    "Metrolab")
+device(bi,        GPIB_IO, devBiMetrolab,    "Metrolab")
+device(bo,        GPIB_IO, devBoMetrolab,    "Metrolab")
+device(stringin,  GPIB_IO, devSiMetrolab,    "Metrolab")
+device(stringout, GPIB_IO, devSoMetrolab,    "Metrolab")
+device(longin,    GPIB_IO, devLiMetrolab,    "Metrolab")
+device(longout,   GPIB_IO, devLoMetrolab,    "Metrolab")
+
+include "asyn.dbd"
+\end{verbatim}
+\item Edit the support module database file
+\begin{enumerate}
+\item Read the displayed value
+\item Put in remote control
+\item Put in local control
+\item Read the field (in Tesla) - this record auto updates
+\end{enumerate}
+\begin{verbatim}
+record(stringin, "$(P)$(R)NMR")
+{
+    field(DESC, "NMR Display Value")
+    field(DTYP, "Metrolab")
+    field(INP,  "#L$(L) A$(A) @0")
+    field(PINI, "YES")
+}
+
+record(bo, "$(P)$(R)Remote")
+{
+    field(DESC, "Remote mode")
+    field(DTYP, "Metrolab")
+    field(OUT,  "#L$(L) A$(A) @1")
+}
+
+record(bo, "$(P)$(R)Local")
+{
+    field(DESC, "Local mode")
+    field(DTYP, "Metrolab")
+    field(OUT,  "#L$(L) A$(A) @2")
+    field(PINI, "YES")
+    field(VAL,  "1")    
+}
+
+record(stringin, "$(P)$(R)Field")
+{
+    field(DESC, "Get the field value")
+    field(DTYP, "Metrolab")
+    field(PINI, "YES")
+    field(SCAN, ".2 second")
+    field(EGU,  "Tesla")
+    field(INP,  "#L$(L) A$(A) @3")
+}
+\end{verbatim}
+\item Edit the Makefile in (\verb~MetrolabSup/Makefile~) to change the location of db file
+\begin{verbatim}
+DB_INSTALLS += ../devMetrolab.db
+\end{verbatim}
+\item Compile
+\begin{verbatim}
+cd MetrolabSup
+make
+\end{verbatim}
+\item Check for \verb~libdevMetrolab.so~ in \verb~$TOP/lib~\\
+      reminder that here, \verb,$TOP=~/project/EPICS/project/Metrolab,
+\item Check for \verb~devMetrolab.dbd~ in \verb~$TOP/dbd~
+\item Check for \verb~devMetrolab.db~ in \verb~$TOP/db~
+\end{itemize}
+\end{enumerate}
+\subsection{Application. This is the code that runs}
+\label{sec-1-2}
+\begin{enumerate}
+\item Make the application
+\label{sec-1-2-1}
+\begin{itemize}
+\item Go to the \$TOP directory
+\begin{verbatim}
+cd ~/project/EPICS/project/Metrolab
+\end{verbatim}
+\item Make the base application and ioc boot directories
+\begin{verbatim}
+makeBaseApp.pl -t ioc Metrolab
+makeBaseApp.pl -i -t ioc Metrolab
+<Enter>
+\end{verbatim}
+\item Edit the Makefile in \verb~$TOP/MetrolabApp/src/~ to include the dbd
+created previously and the asyn driver
+\begin{verbatim}
+# Include dbd files from all support applications:
+Metrolab_DBD += devMetrolab.dbd
+Metrolab_DBD += drvAsynSerialPort.dbd
+\end{verbatim}
+\item Do the same for the libs (before \verb~Metrolab_LIBS += $(EPICS_BASE_IOC_LIBS)~)
+\begin{verbatim}
+# Add all the support libraries needed by this IOC
+Metrolab_LIBS += devMetrolab
+Metrolab_LIBS += asyn
+\end{verbatim}
+\item Edit the Makefile in \verb~$TOP/iocBoot/iocMetrolab~
+\begin{verbatim}
+include $(EPICS_BASE)/configure/RULES.ioc
+\end{verbatim}
+\item Compile
+\begin{verbatim}
+cd ~/project/EPICS/project/Metrolab
+make
+\end{verbatim}
+\item Make sure it exists (there should be a \verb~Metrolab~ executable)
+\begin{verbatim}
+ls bin/linux-x86_64/
+\end{verbatim}
+\end{itemize}
+\item Make the startup script work!
+\label{sec-1-2-2}
+\begin{itemize}
+\item Find the startup script
+\begin{verbatim}
+cd iocBoot/iocMetrolab
+\end{verbatim}
+\item Edit \verb~st.cmd~
+\item The records need to be loaded
+\begin{verbatim}
+## Load record instances
+dbLoadRecords("db/devMetrolab.db","P=Metrolab:,R=,L=0,A=0")
+\end{verbatim}
+\item Get the serial port running
+\begin{verbatim}
+## Serial port
+drvAsynSerialPortConfigure("L0","/dev/ttyUSB0",0,0,0) 
+asynSetOption("L0", -1, "baud", "19200") 
+asynSetOption("L0", -1, "bits", "8") 
+asynSetOption("L0", -1, "parity", "none") 
+asynSetOption("L0", -1, "stop", "1") 
+asynSetOption("L0", -1, "clocal", "Y") 
+asynSetOption("L0", -1, "crtscts", "N")
+\end{verbatim}
+\item Turn on debugging
+\begin{verbatim}
+## Debugging
+asynSetTraceMask("L0",-1,0x9) 
+asynSetTraceIOMask("L0",-1,0x2)
+\end{verbatim}
+\item Make it executable
+\begin{verbatim}
+chmod 755 st.cmd
+\end{verbatim}
+\item run!
+\begin{verbatim}
+./st.cmd
+\end{verbatim}
+\end{itemize}
+\end{enumerate}
+% Emacs 24.3.1 (Org mode 8.2.4)
+\end{document}

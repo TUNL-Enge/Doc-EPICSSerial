@@ -1,0 +1,12 @@
+# backup files
+*~
+*#
+
+# libraries
+*.so
+*.o
+
+
+# Generated directories
+*linux*
+*O.Common*

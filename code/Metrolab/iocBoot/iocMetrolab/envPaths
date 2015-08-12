@@ -1,0 +1,6 @@
+epicsEnvSet("ARCH","linux-x86_64")
+epicsEnvSet("IOC","iocMetrolab")
+epicsEnvSet("TOP","/data/EPICS/project/Metrolab")
+epicsEnvSet("SNCSEQ","/data/EPICS/synApps/support/seq-2-2-1")
+epicsEnvSet("ASYN","/home/longland/project/EPICS/synApps/support/asyn-4-26/")
+epicsEnvSet("EPICS_BASE","/data/EPICS/base-3.15.2")

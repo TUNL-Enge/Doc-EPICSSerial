@@ -1,0 +1,16 @@
+device(ai,        GPIB_IO, devAiMetrolab,    "Metrolab")
+device(ao,        GPIB_IO, devAoMetrolab,    "Metrolab")
+device(bi,        GPIB_IO, devBiMetrolab,    "Metrolab")
+device(bo,        GPIB_IO, devBoMetrolab,    "Metrolab")
+device(stringin,  GPIB_IO, devSiMetrolab,    "Metrolab")
+device(stringout, GPIB_IO, devSoMetrolab,    "Metrolab")
+device(longin,    GPIB_IO, devLiMetrolab,    "Metrolab")
+device(longout,   GPIB_IO, devLoMetrolab,    "Metrolab")
+#device(event,     GPIB_IO, devEvMetrolab,    "Metrolab")
+#device(mbbi,      GPIB_IO, devMbbiMetrolab , "Metrolab")
+#device(mbbiDirect,GPIB_IO, devMbbidMetrolab, "Metrolab")
+#device(mbbo,      GPIB_IO, devMbboMetrolab,  "Metrolab")
+#device(mbboDirect,GPIB_IO, devMbbodMetrolab, "Metrolab")
+#device(waveform,  GPIB_IO, devWfMetrolab,    "Metrolab")
+
+include "asyn.dbd"

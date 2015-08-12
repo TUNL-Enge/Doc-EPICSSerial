@@ -1,0 +1,253 @@
+#+TITLE: EPICS Serial Howto
+#+DATE: <2015-07-14 Tue>
+#+AUTHOR: Richard Longland
+#+EMAIL: longland@X1Carbon
+#+OPTIONS: ':nil *:t -:t ::t <:t H:2 \n:nil ^:t arch:headline
+#+OPTIONS: author:nil c:nil creator:comment d:nil date:t e:t email:nil
+#+OPTIONS: f:t inline:t num:t p:nil pri:nil stat:t tags:not-in-toc
+#+OPTIONS: tasks:t tex:t timestamp:t toc:nil todo:t |:t
+#+CREATOR: Emacs 24.3.1 (Org mode 8.2.4)
+#+DESCRIPTION:
+#+EXCLUDE_TAGS: noexport
+#+KEYWORDS:
+#+LANGUAGE: en
+#+SELECT_TAGS: export
+
+* Brief notes
+  Based on http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/HowToDoSerial/tutorial.html
+  NOTE: $TOP is ~~/project/EPICS/project/Metrolab~ in this case\\
+  Code can be found in ~~/project/EPICS/project/docs/code/Metrolab~
+
+** Support module. This is the "driver"
+*** Make the skeleton
+   + Make a folder and build the skeleton code
+     #+BEGIN_SRC 
+     mkdir Metrolab
+     cd Metrolab
+     $EPICS_SYNAPPS_BASE/support/asyn-4-26/bin/linux-x86_64/makeSupport.pl 
+                       -t devGpib Metrolab
+     #+END_SRC
+     devGpib type is best for serial communivations
+   + Make some changes to configure/RELEASE
+     #+BEGIN_SRC 
+     SNCSEQ=/data/EPICS/synApps/support/seq-2-2-1
+     ASYN = /home/longland/project/EPICS/synApps/support/asyn-4-26/
+     EPICS_BASE=/data/EPICS/base-3.15.2
+     #+END_SRC
+   + Make some changes to configure/CONFIG
+     (uncomment CROSS_COMPILER_TARGET_ARCHS and set it blank)
+     #+BEGIN_SRC 
+     CROSS_COMPILER_TARGET_ARCHS = 
+     #+END_SRC
+
+*** Edit support code
+    + Edit file ~MetrolabSup/devMetrolab.c~
+    + Comment out unneeded DSET definitions (DSET_AI must always be
+      included)
+      Note: "in" is "into EPICS". Out is "write out to device"
+      #+BEGIN_SRC 
+#define DSET_AI     devAiMetrolab   // analog in   - into EPICS
+#define DSET_AO     devAoMetrolab   // analog out  - out to device
+#define DSET_BI     devBiMetrolab   // binary in
+#define DSET_BO     devBoMetrolab   // binary out
+#define DSET_SI     devSiMetrolab   // string in
+#define DSET_SO     devSoMetrolab   // string out
+#define DSET_LI     devLiMetrolab   // long in
+#define DSET_LO     devLoMetrolab   // long out
+      #+END_SRC
+    + Define some strings to translate BI and BO numbers
+      #+BEGIN_SRC 
+static char  *offOnList[] = { "Off","On" };
+static struct devGpibNames   offOn = { 2,offOnList,0,1 };    
+
+static char  *remoteList[] = { "Remote","Remote" };
+static struct devGpibNames remote = { 2,remoteList,0,1 };
+
+static char  *localList[] = { "Local","Local" };
+static struct devGpibNames local = { 2,localList,0,1 };
+      #+END_SRC
+    + Comment out other unused string things (I uncommented
+      ~intExtSsBmStopList~ stuff used by MBBI and MBBO)
+    + Same for EFAST strings (comment out ~userOffOn~)
+    + Now is the important part. The command array. Each element in
+      here is an individual command
+      (see http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/devGpib.html#CreateInstrumentSupport)
+      #+BEGIN_SRC
+  /* Param 0 -- Read the displayed value */
+  {&DSET_SI,      // DSET of command (read a string from the device)
+   GPIBREAD,      // Type (read)
+   IB_Q_HIGH,     // Priority (high)
+   "\x05",        // Format string to send to device 
+                  //            (ASCII HEX 05 - <ENQ>)
+   "%s",          // String to interpret message
+   0, 200,        // Error message length, return message length
+   NULL,          // Conversion
+   0, 0, NULL,    // P1, P2, and P3 used in conversion
+   NULL,          // Name strings
+   NULL           // Input end-of-string
+  },
+
+  /* Param 1 - Remote control */
+  {&DSET_BO, GPIBCMD, IB_Q_HIGH, "R", NULL, 0, 0, 
+       NULL, 0, 0, NULL, &remote, NULL},
+
+  /* Param 2 - Local control */
+  {&DSET_BO, GPIBCMD, IB_Q_HIGH, "L", NULL, 0, 0, 
+       NULL, 0, 0, NULL, &local, NULL},
+
+  /* Param 3 -- Read and convert the displayed value */
+  {&DSET_SI,      // DSET of command (read a string from the device)
+   GPIBREAD,      // Type (read)
+   IB_Q_HIGH,     // Priority (high)
+   "\x05",        // Format string to send to device (ASCII HEX 05 - <ENQ>)
+   "%*c%9s",      // String to interpret message (ignore a character then 9 chars)
+   0, 200,        // Error message length, return message length
+   NULL,          // Conversion
+   0, 0, NULL,    // P1, P2, and P3 used in conversion
+   NULL,          // Name strings
+   NULL           // Input end-of-string
+  },
+      #+END_SRC
+    + Modify the ~Metrolab/devMetrolab.dbd~ to include only the
+      defined DSET definitions (you can comment out things using '#')
+      #+BEGIN_SRC 
+device(ai,        GPIB_IO, devAiMetrolab,    "Metrolab")
+device(ao,        GPIB_IO, devAoMetrolab,    "Metrolab")
+device(bi,        GPIB_IO, devBiMetrolab,    "Metrolab")
+device(bo,        GPIB_IO, devBoMetrolab,    "Metrolab")
+device(stringin,  GPIB_IO, devSiMetrolab,    "Metrolab")
+device(stringout, GPIB_IO, devSoMetrolab,    "Metrolab")
+device(longin,    GPIB_IO, devLiMetrolab,    "Metrolab")
+device(longout,   GPIB_IO, devLoMetrolab,    "Metrolab")
+
+include "asyn.dbd"    
+      #+END_SRC
+    + Edit the support module database file
+      1) Read the displayed value
+      2) Put in remote control
+      3) Put in local control
+      4) Read the field (in Tesla) - this record auto updates
+      #+BEGIN_SRC 
+record(stringin, "$(P)$(R)NMR")
+{
+    field(DESC, "NMR Display Value")
+    field(DTYP, "Metrolab")
+    field(INP,  "#L$(L) A$(A) @0")
+    field(PINI, "YES")
+}
+
+record(bo, "$(P)$(R)Remote")
+{
+    field(DESC, "Remote mode")
+    field(DTYP, "Metrolab")
+    field(OUT,  "#L$(L) A$(A) @1")
+}
+
+record(bo, "$(P)$(R)Local")
+{
+    field(DESC, "Local mode")
+    field(DTYP, "Metrolab")
+    field(OUT,  "#L$(L) A$(A) @2")
+    field(PINI, "YES")
+    field(VAL,  "1")    
+}
+
+record(stringin, "$(P)$(R)Field")
+{
+    field(DESC, "Get the field value")
+    field(DTYP, "Metrolab")
+    field(PINI, "YES")
+    field(SCAN, ".2 second")
+    field(EGU,  "Tesla")
+    field(INP,  "#L$(L) A$(A) @3")
+}
+      #+END_SRC
+    + Edit the Makefile in (~MetrolabSup/Makefile~) to change the location of db file
+      #+BEGIN_SRC 
+      DB_INSTALLS += ../devMetrolab.db
+      #+END_SRC
+    + Compile
+      #+BEGIN_SRC 
+cd MetrolabSup
+make
+      #+END_SRC
+    + Check for ~libdevMetrolab.so~ in ~$TOP/lib~\\
+      reminder that here, ~$TOP=~/project/EPICS/project/Metrolab~
+    + Check for ~devMetrolab.dbd~ in ~$TOP/dbd~
+    + Check for ~devMetrolab.db~ in ~$TOP/db~
+
+** Application. This is the code that runs
+*** Make the application
+    + Go to the $TOP directory
+      #+BEGIN_SRC 
+       cd ~/project/EPICS/project/Metrolab
+      #+END_SRC
+    + Make the base application and ioc boot directories
+      #+BEGIN_SRC 
+makeBaseApp.pl -t ioc Metrolab
+makeBaseApp.pl -i -t ioc Metrolab
+<Enter>
+      #+END_SRC
+    + Edit the Makefile in ~$TOP/MetrolabApp/src/~ to include the dbd
+      created previously and the asyn driver
+      #+BEGIN_SRC 
+# Include dbd files from all support applications:
+Metrolab_DBD += devMetrolab.dbd
+Metrolab_DBD += drvAsynSerialPort.dbd
+      #+END_SRC
+    + Do the same for the libs (before ~Metrolab_LIBS += $(EPICS_BASE_IOC_LIBS)~)
+      #+BEGIN_SRC 
+# Add all the support libraries needed by this IOC
+Metrolab_LIBS += devMetrolab
+Metrolab_LIBS += asyn
+      #+END_SRC
+    + Edit the Makefile in ~$TOP/iocBoot/iocMetrolab~
+      #+BEGIN_SRC 
+include $(EPICS_BASE)/configure/RULES.ioc  
+      #+END_SRC
+    + Compile
+      #+BEGIN_SRC 
+cd ~/project/EPICS/project/Metrolab
+make      
+      #+END_SRC
+    + Make sure it exists (there should be a ~Metrolab~ executable)
+      #+BEGIN_SRC 
+ls bin/linux-x86_64/
+      #+END_SRC
+
+*** Make the startup script work!
+    + Find the startup script
+      #+BEGIN_SRC 
+      cd iocBoot/iocMetrolab
+      #+END_SRC
+    + Edit ~st.cmd~
+    + The records need to be loaded
+      #+BEGIN_SRC 
+## Load record instances
+dbLoadRecords("db/devMetrolab.db","P=Metrolab:,R=,L=0,A=0")
+      #+END_SRC
+    + Get the serial port running
+      #+BEGIN_SRC 
+## Serial port
+drvAsynSerialPortConfigure("L0","/dev/ttyUSB0",0,0,0) 
+asynSetOption("L0", -1, "baud", "19200") 
+asynSetOption("L0", -1, "bits", "8") 
+asynSetOption("L0", -1, "parity", "none") 
+asynSetOption("L0", -1, "stop", "1") 
+asynSetOption("L0", -1, "clocal", "Y") 
+asynSetOption("L0", -1, "crtscts", "N")
+      #+END_SRC
+    + Turn on debugging
+      #+BEGIN_SRC 
+## Debugging
+asynSetTraceMask("L0",-1,0x9) 
+asynSetTraceIOMask("L0",-1,0x2)
+      #+END_SRC
+    + Make it executable
+      #+BEGIN_SRC 
+chmod 755 st.cmd      
+      #+END_SRC
+    + run!
+      #+BEGIN_SRC 
+./st.cmd
+      #+END_SRC
