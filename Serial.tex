@@ -1,4 +1,4 @@
-% Created 2015-07-14 Tue 13:19
+% Created 2015-12-09 Wed 12:46
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -26,11 +26,12 @@
 
 \maketitle
 
-\section{Brief notes}
+\section{ASYN Support}
 \label{sec-1}
 Based on \url{http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/HowToDoSerial/tutorial.html}
 NOTE: \$TOP is \verb,~/project/EPICS/project/Metrolab, in this case\\
   Code can be found in \verb,~/project/EPICS/project/docs/code/Metrolab,
+\emph{This may have been replaced by streamdevice support now. See below}
 
 \subsection{Support module. This is the "driver"}
 \label{sec-1-1}
@@ -279,6 +280,118 @@ chmod 755 st.cmd
 \item run!
 \begin{verbatim}
 ./st.cmd
+\end{verbatim}
+\end{itemize}
+\end{enumerate}
+\section{StreamDevice Support}
+\label{sec-2}
+Based on
+\url{http://www.aps.anl.gov/epics/modules/soft/asyn/R4-24/HowToDoSerial/HowToDoSerial_StreamDevice.html}
+
+\subsection{Create the drivers}
+\label{sec-2-1}
+\begin{enumerate}
+\item Make the skeleton
+\label{sec-2-1-1}
+\begin{itemize}
+\item Make a folder and build the skeleton code
+\begin{verbatim}
+mkdir MaxiGauge
+cd MaxiGauge
+$ASYN/bin/$EPICS_HOST_ARCH/makeSupport.pl -t streamSCPI MaxiGauge
+\end{verbatim}
+\end{itemize}
+
+\item Make the App
+\label{sec-2-1-2}
+\begin{itemize}
+\item Make the skeleton
+\begin{verbatim}
+rm -rf configure
+$EPICS_BASE/bin/$EPICS_HOST_ARCH/makeBaseApp.pl -t ioc MaxiGauge
+EPICS_BASE/bin/$EPICS_HOST_ARCH/makeBaseApp.pl -t ioc -i MaxiGauge
+\end{verbatim}
+\item Make some changes to \verb~configure/RELEASE~
+\begin{verbatim}
+# Asyn
+ASYN = ${EPICS_SYNAPPS_BASE}/support/asyn-4-26/
+
+# Streamdevice
+STREAM = ${EPICS_SYNAPPS_BASE}/support/stream-2-6a
+
+# EPICS_BASE usually appears last so other apps can preempt definitions
+EPICS_BASE=${EPICS_ROOT}/base
+\end{verbatim}
+\item Edit the \verb~MaxiGaugeApp/src/Makefile~
+\begin{verbatim}
+# Include dbd files from all support applications:
+MaxiGauge_DBD += stream.dbd
+MaxiGauge_DBD += drvAsynSerialPort.dbd
+
+# Add all the support libraries needed by this IOC
+MaxiGauge_LIBS += stream asyn
+\end{verbatim}
+\end{itemize}
+
+\item Setup the IOC
+\label{sec-2-1-3}
+\begin{itemize}
+\item Edit \verb~st.cmd~
+\end{itemize}
+\begin{verbatim}
+#!../../bin/linux-x86_64/MaxiGauge
+
+## You may have to change MaxiGauge to something else
+## everywhere it appears in this file
+
+############################################################################### 
+# Set up environment 
+< envPaths
+
+############################################################################### 
+# Allow PV name prefixes and serial port name to be set from the environment 
+epicsEnvSet "P" "$(P=MaxiGauge)" 
+epicsEnvSet "R" "$(R=)" 
+
+############################################################################### 
+## Register all support components
+cd "${TOP}"
+dbLoadDatabase "dbd/MaxiGauge.dbd"
+MaxiGauge_registerRecordDeviceDriver pdbbase
+
+###############################################################################
+## Serial port
+drvAsynSerialPortConfigure("L0","/dev/ttyUSB0",0,0,0) 
+asynSetOption("L0", -1, "baud", "19200") 
+asynSetOption("L0", -1, "bits", "8") 
+asynSetOption("L0", -1, "parity", "none") 
+asynSetOption("L0", -1, "stop", "1") 
+asynSetOption("L0", -1, "clocal", "Y") 
+asynSetOption("L0", -1, "crtscts", "N")
+
+###############################################################################
+## Load record instances
+dbLoadRecords("db/devMaxiGauge.db","P=$(P):,R=$(R),L=0,A=0")
+
+###############################################################################
+## Start EPICS!
+cd "${TOP}/iocBoot/${IOC}"
+iocInit
+\end{verbatim}
+\begin{itemize}
+\item Make it executable
+\begin{verbatim}
+cd iocBoot/iocMaxiGauge
+chmod 755 st.cmd
+\end{verbatim}
+\item Test!
+\begin{verbatim}
+./st.cmd
+\end{verbatim}
+\item Test some more
+\begin{verbatim}
+epics> dbl
+epics> dbpf MaxiGauge:RST
 \end{verbatim}
 \end{itemize}
 \end{enumerate}

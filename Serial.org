@@ -13,10 +13,11 @@
 #+LANGUAGE: en
 #+SELECT_TAGS: export
 
-* Brief notes
+* ASYN Support
   Based on http://www.aps.anl.gov/epics/modules/soft/asyn/R4-1/HowToDoSerial/tutorial.html
   NOTE: $TOP is ~~/project/EPICS/project/Metrolab~ in this case\\
   Code can be found in ~~/project/EPICS/project/docs/code/Metrolab~
+  /This may have been replaced by streamdevice support now. See below/
 
 ** Support module. This is the "driver"
 *** Make the skeleton
@@ -250,4 +251,100 @@ chmod 755 st.cmd
     + run!
       #+BEGIN_SRC 
 ./st.cmd
+      #+END_SRC
+
+* StreamDevice Support
+  Based on
+  http://www.aps.anl.gov/epics/modules/soft/asyn/R4-24/HowToDoSerial/HowToDoSerial_StreamDevice.html
+  
+** Create the drivers
+*** Make the skeleton
+    + Make a folder and build the skeleton code
+      #+BEGIN_SRC 
+      mkdir MaxiGauge
+      cd MaxiGauge
+      $ASYN/bin/$EPICS_HOST_ARCH/makeSupport.pl -t streamSCPI MaxiGauge
+      #+END_SRC
+*** Make the App
+    + Make the skeleton
+      #+BEGIN_SRC sh
+        rm -rf configure
+        $EPICS_BASE/bin/$EPICS_HOST_ARCH/makeBaseApp.pl -t ioc MaxiGauge
+        EPICS_BASE/bin/$EPICS_HOST_ARCH/makeBaseApp.pl -t ioc -i MaxiGauge
+      #+END_SRC
+    + Make some changes to ~configure/RELEASE~
+      #+BEGIN_SRC sh
+        # Asyn
+        ASYN = ${EPICS_SYNAPPS_BASE}/support/asyn-4-26/
+      
+        # Streamdevice
+        STREAM = ${EPICS_SYNAPPS_BASE}/support/stream-2-6a
+      
+        # EPICS_BASE usually appears last so other apps can preempt definitions
+        EPICS_BASE=${EPICS_ROOT}/base
+      #+END_SRC
+    + Edit the ~MaxiGaugeApp/src/Makefile~
+      #+BEGIN_SRC sh
+        # Include dbd files from all support applications:
+        MaxiGauge_DBD += stream.dbd
+        MaxiGauge_DBD += drvAsynSerialPort.dbd
+        
+        # Add all the support libraries needed by this IOC
+        MaxiGauge_LIBS += stream asyn        
+      #+END_SRC
+*** Setup the IOC
+    + Edit ~st.cmd~
+#+BEGIN_SRC sh
+  #!../../bin/linux-x86_64/MaxiGauge
+  
+  ## You may have to change MaxiGauge to something else
+  ## everywhere it appears in this file
+  
+  ############################################################################### 
+  # Set up environment 
+  < envPaths
+  
+  ############################################################################### 
+  # Allow PV name prefixes and serial port name to be set from the environment 
+  epicsEnvSet "P" "$(P=MaxiGauge)" 
+  epicsEnvSet "R" "$(R=)" 
+  
+  ############################################################################### 
+  ## Register all support components
+  cd "${TOP}"
+  dbLoadDatabase "dbd/MaxiGauge.dbd"
+  MaxiGauge_registerRecordDeviceDriver pdbbase
+  
+  ###############################################################################
+  ## Serial port
+  drvAsynSerialPortConfigure("L0","/dev/ttyUSB0",0,0,0) 
+  asynSetOption("L0", -1, "baud", "19200") 
+  asynSetOption("L0", -1, "bits", "8") 
+  asynSetOption("L0", -1, "parity", "none") 
+  asynSetOption("L0", -1, "stop", "1") 
+  asynSetOption("L0", -1, "clocal", "Y") 
+  asynSetOption("L0", -1, "crtscts", "N")
+  
+  ###############################################################################
+  ## Load record instances
+  dbLoadRecords("db/devMaxiGauge.db","P=$(P):,R=$(R),L=0,A=0")
+  
+  ###############################################################################
+  ## Start EPICS!
+  cd "${TOP}/iocBoot/${IOC}"
+  iocInit
+#+END_SRC
+    + Make it executable
+      #+BEGIN_SRC sh
+        cd iocBoot/iocMaxiGauge
+        chmod 755 st.cmd
+      #+END_SRC
+    + Test!
+      #+BEGIN_SRC sh
+      ./st.cmd
+      #+END_SRC
+    + Test some more
+      #+BEGIN_SRC sh
+      epics> dbl
+      epics> dbpf MaxiGauge:RST
       #+END_SRC
