@@ -1,4 +1,4 @@
-% Created 2015-12-09 Wed 12:46
+% Created 2015-12-10 Thu 08:20
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -326,6 +326,7 @@ EPICS_BASE=${EPICS_ROOT}/base
 \begin{verbatim}
 # Include dbd files from all support applications:
 MaxiGauge_DBD += stream.dbd
+MaxiGauge_DBD += asyn.dbd
 MaxiGauge_DBD += drvAsynSerialPort.dbd
 
 # Add all the support libraries needed by this IOC
